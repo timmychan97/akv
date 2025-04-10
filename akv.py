@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import subprocess
 import json
 from pathlib import Path
@@ -27,7 +26,6 @@ def read_cache():
     if not CACHE_FILE.exists():
         print("Cache file not found. Updating cache now...")
         update_cache()
-
     try:
         with open(CACHE_FILE, "r") as f:
             return json.load(f)
@@ -35,7 +33,7 @@ def read_cache():
         print(f"Error reading cache file: {e}")
         return []
 
-def update_cache():
+def update_cache(args=None):
     """Update the cache file with fresh key vault names."""
     vault_names = fetch_keyvault_names()
     if vault_names:
@@ -48,30 +46,78 @@ def update_cache():
     else:
         print("No vault names found. Cache update skipped.")
 
-def handle_completion():
+def list_secrets(args):
+    """List all secrets from a specific Key Vault."""
+    keyvault_name = args.keyvault_name
+    try:
+        result = subprocess.run(
+            ["az", "keyvault", "secret", "list", "--vault-name", keyvault_name, "--query", "[].name", "-o", "tsv"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        secrets = result.stdout.strip().split("\n")
+        print(f"Secrets in Key Vault '{keyvault_name}':")
+        for secret in secrets:
+            print(secret)
+    except subprocess.CalledProcessError as e:
+        print(f"Error fetching secrets from Key Vault '{keyvault_name}': {e}")
+
+def handle_completion(args=None):
     """Output cached key vault names for Bash completion."""
     vault_names = read_cache()
     print("\n".join(vault_names))
 
+def list_commands(args=None):
+    """Output the list of registered commands for Bash completion."""
+    commands = ["update", "sync", "ls", "kv", "--complete", "--list_commands"]
+    print("\n".join(commands))
+
+def ls_cache(args=None):
+    """Print the cached Key Vault names."""
+    vault_names = read_cache()
+    for vault in vault_names:
+        print(vault)
+
 def main():
     parser = ArgumentParser(description="Azure Key Vault CLI tool with caching.")
-    
-    # Add optional arguments (flags) for syncing cache
-    parser.add_argument("--update", action="store_true", help="Update the cache with the latest key vault names.")
-    parser.add_argument("--sync", action="store_true", help="Update the cache with the latest key vault names (alternative to --update).")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # `update` subcommand
+    update_parser = subparsers.add_parser("update", help="Update the cache with the latest key vault names.")
+    update_parser.set_defaults(func=update_cache)
+
+    # `sync` subcommand (alias for `update`)
+    sync_parser = subparsers.add_parser("sync", help="Update the cache with the latest key vault names (alias for 'update').")
+    sync_parser.set_defaults(func=update_cache)
+
+    # `ls` subcommand
+    ls_parser = subparsers.add_parser("ls", help="List cached key vault names.")
+    ls_parser.set_defaults(func=ls_cache)
+
+    # `kv` subcommand
+    kv_parser = subparsers.add_parser("kv", help="List all secrets from a specific Key Vault.")
+    kv_parser.add_argument("keyvault_name", help="Name of the Key Vault")
+    kv_parser.set_defaults(func=list_secrets)
+
+    # `--complete` option (no subparser, standalone flag)
     parser.add_argument("--complete", action="store_true", help="Output cached key vault names for autocompletion.")
-    parser.add_argument("keyvault", nargs="?", help="Key Vault name (optional).")
+
+    # `--list_commands` option
+    parser.add_argument("--list_commands", action="store_true", help="Output the list of registered commands for autocompletion.")
+
     args = parser.parse_args()
 
-    # Handle subcommands and arguments
-    if args.update or args.sync:
-        update_cache()
+    # Handle commands
+    if args.command:
+        # Invoke the function associated with the subcommand
+        args.func(args)
     elif args.complete:
-        handle_completion()
-    elif args.keyvault:
-        print(f"Selected Key Vault: {args.keyvault}")
+        handle_completion(args)
+    elif args.list_commands:
+        list_commands(args)
     else:
-        print("No Key Vault selected. Use '--update' or '--sync' to refresh cache, and '--complete' for suggestions.")
+        parser.print_help()
 
 if __name__ == "__main__":
     main()

@@ -1,14 +1,25 @@
-_akv_complete() {
-    local cur prev opts
+# Bash completion for the akv script
+_akv_completion() {
+    local cur prev commands
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    # Retrieve key vault names using the Python script.
-    opts=$(akv --complete)
-    
-    # Show all possible completions for the current word.
-    COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
-    return 0
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        # Fetch commands dynamically from the Python script
+        commands=$(akv --list_commands)
+        COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+        return 0
+    fi
+
+    if [[ $prev == "kv" ]]; then
+        # Fetch cached Key Vault names dynamically
+        local vault_names
+        vault_names=$(akv --complete)
+        COMPREPLY=( $(compgen -W "$vault_names" -- "$cur") )
+        return 0
+    fi
 }
-complete -F _akv_complete akv
+
+# Register `akv` with the completion function
+complete -F _akv_completion akv
