@@ -1,0 +1,14 @@
+_akv_complete() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # Retrieve key vault names using the Python script.
+    opts=$(akv --complete)
+    
+    # Show all possible completions for the current word.
+    COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+    return 0
+}
+complete -F _akv_complete akv
