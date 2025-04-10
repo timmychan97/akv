@@ -199,24 +199,43 @@ def search(args):
         combined_data = cache
 
     search_text = args.text
-    search_results = []
-    for vault, secrets in combined_data.items():
-        if not secrets:
-            search_results.append(f"{vault}/")
-        if isinstance(secrets, list):
-            search_results.extend(f"{vault}/{secret}" for secret in secrets)
+    show_values = getattr(args, 'show', False)
 
+    # Flatten all vault/secret pairs into a dictionary for easier access
+    vault_secret_map = {}
+    for vault, secrets in combined_data.items():
+        if secrets:
+            for secret in secrets:
+                vault_secret_map[f"{vault}/{secret}"] = (vault, secret)
+        else:
+            vault_secret_map[f"{vault}/"] = (vault, None)
+
+    # Perform the search on all combined strings
     if '*' in search_text:
         regex_pattern = "^" + search_text.replace("*", ".*") + "$"
         search_pattern = re.compile(regex_pattern)
-        matches = [item for item in search_results if search_pattern.match(item)]
+        matches = [key for key in vault_secret_map if search_pattern.match(key)]
     else:
-        matches = [item for item in search_results if item.startswith(search_text)]
+        matches = [key for key in vault_secret_map if key.startswith(search_text)]
 
     if not matches:
         raise Exception(f"No matches found for '{search_text}' in the cache.")
-    for match in matches:
-        print(match)
+
+    # Handle `show`: Display both the secret paths and their values
+    if show_values:
+        for match in matches:
+            vault, secret = vault_secret_map[match]
+            if secret:  # Only fetch if it's a valid vault/secret pair
+                try:
+                    value = fetch_secret_value(vault, secret)
+                    print(f"{vault}/{secret}: {value}")
+                except AzureCLIError as e:
+                    print(f"Error fetching secret '{vault}/{secret}': {e}")
+            else:
+                print(f"{vault}/: (no secrets)")
+    else:
+        for match in matches:
+            print(match)
 
 
 def handle_completion(args=None):
@@ -267,6 +286,9 @@ def main():
     search_parser = subparsers.add_parser("search", help="Search vault/secret paths in the cache.")
     search_parser.add_argument("text", help="Search text (supports wildcard * syntax for matches).")
     search_parser.set_defaults(func=search)
+    search_subparsers = search_parser.add_subparsers(dest="subcommand")
+    search_show_parser = search_subparsers.add_parser("show", help="List all secrets and their values from the search.")
+    search_show_parser.set_defaults(func=search, show=True)
 
     parser.add_argument("--complete", action="store_true", help="Output cached Key Vault names for autocompletion.")
     parser.add_argument("--list_commands", action="store_true", help="Output the list of all available main commands.")
