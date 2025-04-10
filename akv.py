@@ -3,66 +3,73 @@ import subprocess
 import json
 from pathlib import Path
 from argparse import ArgumentParser
-from tqdm import tqdm  # Progress bar library
+from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Define the location for the cache file
 CACHE_FILE = Path.home() / ".akv_cache.json"
 
+def run_command(command):
+    """Utility function to safely run subprocess commands with error handling."""
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing command {' '.join(command)}: {e.stderr.strip()}")
+        return None
+    except FileNotFoundError as e:
+        print(f"Azure CLI not found or not installed: {e}")
+        return None
+
 def fetch_keyvault_names():
     """Fetch key vault names using `az keyvault list`."""
-    try:
-        result = subprocess.run(
-            ["az", "keyvault", "list", "--query", "[].name", "-o", "tsv"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip().split("\n")
-    except subprocess.CalledProcessError as e:
-        print(f"Error fetching keyvault names: {e}")
-        return []
+    command = [
+        "az", "keyvault", "list", "--query", "[].name", "-o", "tsv"
+    ]
+    result = run_command(command)
+    return result.split("\n") if result else []
 
 def fetch_secrets_for_vault(vault):
-    """Fetch secrets for a specific Key Vault."""
-    try:
-        result = subprocess.run(
-            ["az", "keyvault", "secret", "list", "--vault-name", vault, "--query", "[].name", "-o", "tsv"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        secret_names = result.stdout.strip().split("\n")
-        return vault, secret_names
-    except subprocess.CalledProcessError as e:
-        print(f"Error fetching secrets for Key Vault '{vault}': {e}")
-        return vault, []
+    """Fetch secret names for a specific Key Vault."""
+    command = [
+        "az", "keyvault", "secret", "list", "--vault-name", vault,
+        "--query", "[].name", "-o", "tsv"
+    ]
+    result = run_command(command)
+    secret_names = result.split("\n") if result else []
+    return vault, secret_names
 
 def fetch_keyvault_and_secret_names():
     """Fetch both key vault names and their secret names, using parallel execution."""
     vaults = {}
     keyvault_names = fetch_keyvault_names()
-
     if not keyvault_names:
         print("No Key Vaults found.")
         return vaults
 
-    print("Fetching secrets for Key Vaults (up to 10 at a time)...")
-
-    # Use ThreadPoolExecutor to parallelize the secret-fetching tasks
+    print(f"Fetching secrets for {len(keyvault_names)} Key Vault(s)...")
     with ThreadPoolExecutor(max_workers=10) as executor:
-        # Submit tasks for fetching secrets for each Key Vault
-        future_to_vault = {executor.submit(fetch_secrets_for_vault, vault): vault for vault in keyvault_names}
-
-        # Create a progress bar for the tasks
-        with tqdm(total=len(future_to_vault), unit="vaults") as pbar:
+        future_to_vault = {
+            executor.submit(fetch_secrets_for_vault, vault): vault
+            for vault in keyvault_names
+        }
+        with tqdm(total=len(future_to_vault), unit="vault") as pbar:
             for future in as_completed(future_to_vault):
                 vault, secrets = future.result()
                 vaults[vault] = secrets
                 pbar.update(1)  # Increment the progress bar
-
     print("Secrets fetching complete.")
     return vaults
+
+def fetch_secret_value(vault_name, secret_name):
+    """Fetch the value of a specific secret from a Key Vault."""
+    command = [
+        "az", "keyvault", "secret", "show", "--vault-name", vault_name,
+        "--name", secret_name, "--query", "value", "-o", "tsv"
+    ]
+    return run_command(command)
 
 def read_cache():
     """Read cached key vault names and their secrets. If cache file is missing, update it."""
@@ -78,16 +85,16 @@ def read_cache():
 
 def update_cache(args=None):
     """Update the cache file with fresh key vault names."""
-    vault_names = fetch_keyvault_names()
-    if vault_names:
+    keyvault_names = fetch_keyvault_names()
+    if keyvault_names:
         try:
             with open(CACHE_FILE, "w") as f:
-                json.dump(vault_names, f)
-            print(f"Cache updated successfully with key vaults! ({len(vault_names)} vaults)")
+                json.dump(keyvault_names, f)
+            print(f"Cache updated successfully with {len(keyvault_names)} Key Vaults.")
         except Exception as e:
             print(f"Error writing cache file: {e}")
     else:
-        print("No vault names found. Cache update skipped.")
+        print("No Key Vault names found. Cache update skipped.")
 
 def update_all(args=None):
     """Update the cache file with both key vault names and their secrets."""
@@ -95,15 +102,15 @@ def update_all(args=None):
     try:
         with open(CACHE_FILE, "w") as f:
             json.dump(vaults_with_secrets, f)
-        print(f"Cache updated successfully with key vaults and secrets!")
+        print("Cache updated successfully with Key Vaults and their secrets.")
     except Exception as e:
         print(f"Error writing cache file: {e}")
 
 def list_secrets(args):
-    """List all secrets from a specific Key Vault using the cache."""
+    """List all secrets from a specific Key Vault without their values, using the cache."""
     cache = read_cache()
     keyvault_name = args.keyvault_name
-    secrets = cache.get(keyvault_name, None)
+    secrets = cache.get(keyvault_name)
     if secrets is None:
         print(f"No data found for Key Vault '{keyvault_name}' in the cache.")
     elif not secrets:
@@ -112,6 +119,34 @@ def list_secrets(args):
         print(f"Secrets in Key Vault '{keyvault_name}':")
         for secret in secrets:
             print(secret)
+
+def show_secrets(args):
+    """List all secrets and their values from a specific Key Vault."""
+    cache = read_cache()
+    keyvault_name = args.keyvault_name
+    secret_name = args.secret_name
+    secrets = cache.get(keyvault_name)
+    if secret_name:
+        value = fetch_secret_value(keyvault_name, secret_name)
+        if value is not None:
+            print(f"Value of secret '{secret_name}': {value}")
+    elif secrets is None:
+        print(f"No data found for Key Vault '{keyvault_name}' in the cache.")
+    elif not secrets:
+        print(f"No secrets found for Key Vault '{keyvault_name}'.")
+    else:
+        print(f"Secrets and their values in Key Vault '{keyvault_name}':")
+        for secret in secrets:
+            value = fetch_secret_value(keyvault_name, secret)
+            print(f"{secret}: {value}")
+
+def show_secret_value(args):
+    """Show the value of a specific secret from a Key Vault."""
+    keyvault_name = args.keyvault_name
+    secret_name = args.secret_name
+    value = fetch_secret_value(keyvault_name, secret_name)
+    if value is not None:
+        print(f"Value of secret '{secret_name}': {value}")
 
 def handle_completion(args=None):
     """Output cached key vault names for Bash completion."""
@@ -139,36 +174,31 @@ def main():
     parser = ArgumentParser(description="Azure Key Vault CLI tool with caching.")
     subparsers = parser.add_subparsers(dest="command")
 
-    # `update` subcommand
-    update_parser = subparsers.add_parser("update", help="Update the cache with the latest key vault names.")
-    update_parser.set_defaults(func=update_cache)
+    # Subcommands
+    subparsers.add_parser("update", help="Update the cache with key vault names.").set_defaults(func=update_cache)
+    subparsers.add_parser("sync", help="Alias for `update`.").set_defaults(func=update_cache)
+    subparsers.add_parser("ls", help="List cached key vault names.").set_defaults(func=ls_cache)
 
-    # `sync` subcommand (alias for `update`)
-    sync_parser = subparsers.add_parser("sync", help="Update the cache with the latest key vault names (alias for 'update').")
-    sync_parser.set_defaults(func=update_cache)
-
-    # `ls` subcommand
-    ls_parser = subparsers.add_parser("ls", help="List cached key vault names.")
-    ls_parser.set_defaults(func=ls_cache)
-
-    # `kv` subcommand
-    kv_parser = subparsers.add_parser("kv", help="List all secrets from a specific Key Vault.")
+    # Key Vault Commands
+    kv_parser = subparsers.add_parser("kv", help="Manage secrets from a specific Key Vault.")
     kv_parser.add_argument("keyvault_name", help="Name of the Key Vault")
     kv_parser.set_defaults(func=list_secrets)
+    kv_subparsers = kv_parser.add_subparsers(dest="subcommand")
 
-    # `update_all` subcommand
-    update_all_parser = subparsers.add_parser("update_all", help="Update the cache with both key vaults and secrets.")
-    update_all_parser.set_defaults(func=update_all)
+    kv_show_parser = kv_subparsers.add_parser("show", help="List all secrets and their values.")
+    kv_show_parser.add_argument("secret_name", nargs="?", help="Name of the secret")
+    kv_show_parser.set_defaults(func=show_secrets)
 
-    # `--complete` option (no subparser, standalone flag)
+    subparsers.add_parser("update_all", help="Update cache with vaults and secrets.").set_defaults(func=update_all)
+
+    # `--complete` option
     parser.add_argument("--complete", action="store_true", help="Output cached key vault names for autocompletion.")
 
     # `--list_commands` option
     parser.add_argument("--list_commands", action="store_true", help="Output the list of registered commands for autocompletion.")
 
     args = parser.parse_args()
-
-    # Handle commands
+    
     if args.command:
         args.func(args)
     elif args.complete:
