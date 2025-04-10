@@ -2,6 +2,7 @@
 import sys
 import subprocess
 import json
+import re
 from pathlib import Path
 from argparse import ArgumentParser
 from tqdm import tqdm
@@ -199,6 +200,40 @@ def update_specific_vault(args):
             raise e
 
 
+def search(args):
+    """Search Key Vaults and secrets in the cache based on the provided text."""
+    cache = read_cache()
+    if isinstance(cache, list):  # Convert legacy cache format to dictionary structure if needed
+        combined_data = {kv: [] for kv in cache}
+    else:
+        combined_data = cache
+
+    search_text = args.text
+    search_results = []
+
+    # Create the "vault/secret" paths
+    for vault, secrets in combined_data.items():
+        if not secrets:
+            search_results.append(f"{vault}/")
+        if isinstance(secrets, list):
+            search_results.extend(f"{vault}/{secret}" for secret in secrets)
+
+    # Perform search based on the presence of wildcard (*)
+    if '*' in search_text:
+        # Convert search_text (with wildcard *) into regex
+        regex_pattern = "^" + search_text.replace("*", ".*") + "$"
+        search_pattern = re.compile(regex_pattern)
+        matches = [item for item in search_results if search_pattern.match(item)]
+    else:
+        # Prefix search (simple string startswith)
+        matches = [item for item in search_results if item.startswith(search_text)]
+
+    if not matches:
+        raise Exception(f"No matches found for '{search_text}' in the cache.")
+    for match in matches:
+        print(match)
+
+
 def handle_completion(args=None):
     """Output cached key vault names for Bash completion."""
     cache = read_cache()
@@ -208,7 +243,7 @@ def handle_completion(args=None):
 
 def list_commands(args=None):
     """Output the list of registered commands for Bash completion."""
-    commands = ["update", "sync", "ls", "kv", "update_all", "--complete", "--list_commands"]
+    commands = ["update", "sync", "ls", "kv", "update_all", "search", "--complete", "--list_commands"]
     print("\n".join(commands))
 
 
@@ -245,6 +280,11 @@ def main():
     kv_show_parser.set_defaults(func=show_secrets)
     kv_update_parser = kv_subparsers.add_parser("update", help="Update cache for a specific Key Vault.")
     kv_update_parser.set_defaults(func=update_specific_vault)
+    
+    # `search` command
+    search_parser = subparsers.add_parser("search", help="Search vault/secret paths in the cache.")
+    search_parser.add_argument("text", help="Search text (supports wildcard * syntax for matches).")
+    search_parser.set_defaults(func=search)
     
     # `--complete` option
     parser.add_argument("--complete", action="store_true", help="Output cached Key Vault names for autocompletion.")
