@@ -238,11 +238,11 @@ def main():
     kv_parser.add_argument("keyvault_name", help="Name of the Key Vault")
     kv_parser.set_defaults(func=list_secrets)
     kv_subparsers = kv_parser.add_subparsers(dest="subcommand")
+    kv_ls_parser = kv_subparsers.add_parser("ls", help="List all secrets' names in the Key Vault.")
+    kv_ls_parser.set_defaults(func=list_secrets)
     kv_show_parser = kv_subparsers.add_parser("show", help="List all secrets or a specific secret value in the Key Vault.")
     kv_show_parser.add_argument("secret_name", nargs="?", help="Name of the secret (optional)")
     kv_show_parser.set_defaults(func=show_secrets)
-
-    # Adding 'update' to the 'kv' subcommands
     kv_update_parser = kv_subparsers.add_parser("update", help="Update cache for a specific Key Vault.")
     kv_update_parser.set_defaults(func=update_specific_vault)
     
