@@ -212,14 +212,14 @@ def search(args):
     def display_matches_with_values(matches, vault_secret_map):
         for match in matches:
             vault, secret = vault_secret_map[match]
-            if secret:  # Only fetch if it's a valid vault/secret pair
+            if secret:
                 try:
                     value = fetch_secret_value(vault, secret)
-                    print(f"{vault}/{secret}: {value}")
+                    display_vault(vault, secret, value=value)
                 except AzureCLIError as e:
-                    print(f"Error fetching secret '{vault}/{secret}': {e}")
+                    display_vault(vault, secret, error=f"Error: {e}")
             else:
-                print(f"{vault}/: (no secrets)")
+                display_vault(vault)
 
     cache = read_cache()
     vault_secret_map = create_vault_secret_map(cache)
@@ -232,7 +232,33 @@ def search(args):
         display_matches_with_values(matches, vault_secret_map)
     else:
         for match in matches:
-            print(match)
+            display_vault(*vault_secret_map[match])
+
+
+def display_vault(vault, secret=None, value=None, error=None):
+    """Display a vault, secret, and optional value or error with color formatting."""
+    LIGHT_BLUE = "\033[94m"
+    YELLOW = "\033[93m"
+    LIGHT_PURPLE = "\033[95m"
+    LIGHT_RED = "\033[91m"
+    RESET = "\033[0m"  # Reset color
+
+    vault_display = f"{LIGHT_BLUE}{vault}/{RESET}"
+    colon_display = f"{LIGHT_PURPLE}:{RESET}"
+
+    if error:
+        secret_display = f"{YELLOW}{secret}{RESET}" if secret else ""
+        error_display = f"{LIGHT_RED}{error}{RESET}"
+        print(f"{vault_display}{secret_display}{colon_display} {error_display}")
+    elif secret:
+        secret_display = f"{YELLOW}{secret}{RESET}"
+        if value is not None:
+            print(f"{vault_display}{secret_display}{colon_display} {value}")
+        else:
+            print(f"{vault_display}{secret_display}")
+    else: 
+        no_secrets_display = f"{LIGHT_RED}(no secrets){RESET}"
+        print(f"{vault_display}{colon_display} {no_secrets_display}")
 
 
 def handle_completion(args=None):
