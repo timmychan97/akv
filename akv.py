@@ -150,13 +150,28 @@ def show_secrets(args):
             print(f"{secret}: {value}")
 
 
-def show_secret_value(args):
-    """Show the value of a specific secret"""
+def update_specific_vault(args):
+    """Update the cache for a specific Key Vault."""
     keyvault_name = args.keyvault_name
-    secret_name = args.secret_name
-    value = fetch_secret_value(keyvault_name, secret_name)
-    if value is not None:
-        print(f"Value of secret '{secret_name}': {value}")
+    print(f"Updating cache for Key Vault: {keyvault_name}")
+    
+    vault, secrets = fetch_secrets_for_vault(keyvault_name)
+    if not secrets:
+        print(f"No secrets found for Key Vault '{keyvault_name}'.")
+        return
+
+    # Update the cache for this specific Key Vault
+    cache = read_cache()
+    if isinstance(cache, list):  # Convert legacy cache format to dictionary format
+        cache = {kv: [] for kv in cache}
+    
+    cache[vault] = secrets
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(cache, f)
+        print(f"Cache updated successfully for Key Vault '{keyvault_name}'.")
+    except Exception as e:
+        print(f"Error writing cache file: {e}")
 
 
 def handle_completion(args=None):
@@ -202,6 +217,10 @@ def main():
     kv_show_parser.add_argument("secret_name", nargs="?", help="Name of the secret (optional)")
     kv_show_parser.set_defaults(func=show_secrets)
 
+    # Adding 'update' to the 'kv' subcommands
+    kv_update_parser = kv_subparsers.add_parser("update", help="Update cache for a specific Key Vault.")
+    kv_update_parser.set_defaults(func=update_specific_vault)
+    
     # `--complete` option
     parser.add_argument("--complete", action="store_true", help="Output cached Key Vault names for autocompletion.")
 
