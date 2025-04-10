@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Define the location for the cache file
+# Location for the cache file
 CACHE_FILE = Path.home() / ".akv_cache.json"
 
 def run_command(command):
@@ -116,7 +116,7 @@ def list_secrets(args):
     elif not secrets:
         print(f"No secrets found for Key Vault '{keyvault_name}'.")
     else:
-        print(f"Secrets in Key Vault '{keyvault_name}':")
+        # print(f"Secrets in Key Vault '{keyvault_name}':")
         for secret in secrets:
             print(secret)
 
@@ -136,6 +136,7 @@ def show_secrets(args):
         print(f"No secrets found for Key Vault '{keyvault_name}'.")
     else:
         print(f"Secrets and their values in Key Vault '{keyvault_name}':")
+        print("-------------------------------------")
         for secret in secrets:
             value = fetch_secret_value(keyvault_name, secret)
             print(f"{secret}: {value}")
