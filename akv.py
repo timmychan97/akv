@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 import subprocess
 import json
 from pathlib import Path
@@ -10,6 +11,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 CACHE_FILE = Path.home() / ".akv_cache.json"
 
 
+class AzureCLIError(Exception):
+    """Custom exception for Azure CLI errors."""
+    def __init__(self, message, command=None):
+        super().__init__(message)
+        self.command = command
+
+
 def run_command(command):
     """Utility function to safely run subprocess commands with error handling."""
     try:
@@ -18,8 +26,14 @@ def run_command(command):
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        print(f"Error executing command {' '.join(command)}: {e.stderr.strip()}")
-        return None
+        # Raise a custom AzureCLIError with the relevant error message
+        error_message = e.stderr.strip()
+        if "Failed to establish a new connection" in error_message:
+            raise AzureCLIError(f"Unable to connect to the Key Vault: {error_message}", command=command)
+        elif "ERROR:" in error_message:
+            raise AzureCLIError(f"Azure CLI returned an error: {error_message}", command=command)
+        # Handle generic subprocess errors
+        raise AzureCLIError(f"Command failed: {' '.join(command)}\n{error_message}", command=command)
     except FileNotFoundError as e:
         print(f"Azure CLI not found or not installed: {e}")
         return None
@@ -35,12 +49,15 @@ def fetch_keyvault_names():
 
 
 def fetch_secrets_for_vault(vault):
-    """Fetch secret names for a specific Key Vault."""
+    """Fetch secret names for a specific Key Vault, with error handling for missing vaults."""
     command = [
         "az", "keyvault", "secret", "list", "--vault-name", vault,
         "--query", "[].name", "-o", "tsv"
     ]
     result = run_command(command)
+    if result is None:  # Check if the command failed
+        print(f"Error: Key Vault '{vault}' does not exist or is unavailable.")
+        return vault, None
     secret_names = result.split("\n") if result else []
     return vault, secret_names
 
@@ -155,23 +172,31 @@ def update_specific_vault(args):
     keyvault_name = args.keyvault_name
     print(f"Updating cache for Key Vault: {keyvault_name}")
     
-    vault, secrets = fetch_secrets_for_vault(keyvault_name)
-    if not secrets:
-        print(f"No secrets found for Key Vault '{keyvault_name}'.")
-        return
-
-    # Update the cache for this specific Key Vault
-    cache = read_cache()
-    if isinstance(cache, list):  # Convert legacy cache format to dictionary format
-        cache = {kv: [] for kv in cache}
-    
-    cache[vault] = secrets
     try:
-        with open(CACHE_FILE, "w") as f:
-            json.dump(cache, f)
-        print(f"Cache updated successfully for Key Vault '{keyvault_name}'.")
-    except Exception as e:
-        print(f"Error writing cache file: {e}")
+        # Fetch secrets for the Key Vault
+        vault, secrets = fetch_secrets_for_vault(keyvault_name)
+        if not secrets:  # No secrets in the Key Vault
+            print(f"No secrets found for Key Vault '{keyvault_name}'.")
+            return
+        
+        # Update the cache for this specific Key Vault
+        cache = read_cache()
+        if isinstance(cache, list):  # Convert legacy cache format to dictionary format
+            cache = {kv: [] for kv in cache}
+        
+        cache[vault] = secrets
+        try:
+            with open(CACHE_FILE, "w") as f:
+                json.dump(cache, f)
+            print(f"Cache updated successfully for Key Vault '{keyvault_name}'.")
+        except Exception as e:
+            print(f"Error writing to cache file: {e}")
+
+    except AzureCLIError as e:
+        if "[Errno -2] Name or service not known" in str(e):
+            raise Exception(f"The Key Vault '{keyvault_name}' does not exist or is not available.")
+        else:
+            raise e
 
 
 def handle_completion(args=None):
@@ -229,7 +254,11 @@ def main():
 
     args = parser.parse_args()
     if args.command:
-        args.func(args)
+        try:
+            args.func(args)
+        except Exception as e:
+            print(f"\033[91mError: {e}\033[0m", file=sys.stderr)  # Print error message in red
+            sys.exit(1)
     elif args.complete:
         handle_completion(args)
     elif args.list_commands:
