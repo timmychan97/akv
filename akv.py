@@ -182,47 +182,34 @@ def update_specific_vault(args):
     try:
         vault, secrets = fetch_secrets_for_vault(keyvault_name)
         cache = read_cache()
-        if isinstance(cache, list):
-            cache = {kv: [] for kv in cache}
         cache[vault] = secrets
         write_cache_to_file(cache)
     except AzureCLIError as e:
         print(f"Error updating cache for Key Vault '{keyvault_name}': {e}")
 
-
 def search(args):
     """Search Key Vaults and secrets in the cache based on the provided text."""
-    cache = read_cache()
-    if isinstance(cache, list):
-        combined_data = {kv: [] for kv in cache}
-    else:
-        combined_data = cache
 
-    search_text = args.text
-    show_values = getattr(args, 'show', False)
+    def create_vault_secret_map(cache):
+        """Flatten vault/secret pairs into a dictionary for easier access."""
+        vault_secret_map = {}
+        for vault, secrets in cache.items():
+            if secrets:
+                for secret in secrets:
+                    vault_secret_map[f"{vault}/{secret}"] = (vault, secret)
+            else:
+                vault_secret_map[f"{vault}/"] = (vault, None)
+        return vault_secret_map
 
-    # Flatten all vault/secret pairs into a dictionary for easier access
-    vault_secret_map = {}
-    for vault, secrets in combined_data.items():
-        if secrets:
-            for secret in secrets:
-                vault_secret_map[f"{vault}/{secret}"] = (vault, secret)
-        else:
-            vault_secret_map[f"{vault}/"] = (vault, None)
+    def perform_search(vault_secret_map, search_text):
+        """Find matches in the vault/secret map based on the search text."""
+        if "*" in search_text:
+            regex_pattern = "^" + search_text.replace("*", ".*") + "$"
+            search_pattern = re.compile(regex_pattern)
+            return [key for key in vault_secret_map if search_pattern.match(key)]
+        return [key for key in vault_secret_map if key.startswith(search_text)]
 
-    # Perform the search on all combined strings
-    if '*' in search_text:
-        regex_pattern = "^" + search_text.replace("*", ".*") + "$"
-        search_pattern = re.compile(regex_pattern)
-        matches = [key for key in vault_secret_map if search_pattern.match(key)]
-    else:
-        matches = [key for key in vault_secret_map if key.startswith(search_text)]
-
-    if not matches:
-        raise Exception(f"No matches found for '{search_text}' in the cache.")
-
-    # Handle `show`: Display both the secret paths and their values
-    if show_values:
+    def display_matches_with_values(matches, vault_secret_map):
         for match in matches:
             vault, secret = vault_secret_map[match]
             if secret:  # Only fetch if it's a valid vault/secret pair
@@ -233,6 +220,16 @@ def search(args):
                     print(f"Error fetching secret '{vault}/{secret}': {e}")
             else:
                 print(f"{vault}/: (no secrets)")
+
+    cache = read_cache()
+    vault_secret_map = create_vault_secret_map(cache)
+
+    matches = perform_search(vault_secret_map, args.text)
+    if not matches:
+        raise Exception(f"No matches found for '{args.text}' in the cache.")
+
+    if getattr(args, "show", False):
+        display_matches_with_values(matches, vault_secret_map)
     else:
         for match in matches:
             print(match)
