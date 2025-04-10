@@ -106,16 +106,29 @@ def read_cache():
         return {}
 
 
+def write_cache_to_file(cache):
+    """Utility function to write cache to file, ensuring it is sorted alphabetically."""
+    # Ensure the dictionary is sorted alphabetically by key (vault names)
+    # and the secrets list is also sorted
+    sorted_cache = {
+        vault: sorted(secrets) if secrets else []
+        for vault, secrets in sorted(cache.items())
+    }
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(sorted_cache, f, indent=4)
+            f.write('\n')
+        print(f"Cache updated successfully.")
+    except Exception as e:
+        print(f"Error writing to cache file: {e}")
+
+
 def update_cache(args=None):
     """Update the cache file with fresh key vault names."""
     keyvault_names = fetch_keyvault_names()
     if keyvault_names:
-        try:
-            with open(CACHE_FILE, "w") as f:
-                json.dump(keyvault_names, f)
-            print(f"Cache updated successfully with {len(keyvault_names)} Key Vaults.")
-        except Exception as e:
-            print(f"Error writing cache file: {e}")
+        cache = {kv: [] for kv in keyvault_names}  # Empty list for secrets
+        write_cache_to_file(cache)
     else:
         print("No Key Vault names found. Cache update skipped.")
 
@@ -123,12 +136,7 @@ def update_cache(args=None):
 def update_all(args=None):
     """Update the cache file with both key vault names and their secrets."""
     vaults_with_secrets = fetch_keyvault_and_secret_names()
-    try:
-        with open(CACHE_FILE, "w") as f:
-            json.dump(vaults_with_secrets, f)
-        print("Cache updated successfully with Key Vaults and their secrets.")
-    except Exception as e:
-        print(f"Error writing cache file: {e}")
+    write_cache_to_file(vaults_with_secrets)
 
 
 def list_secrets(args):
@@ -141,7 +149,6 @@ def list_secrets(args):
     elif not secrets:
         print(f"No secrets found for Key Vault '{keyvault_name}'.")
     else:
-        # print(f"Secrets in Key Vault '{keyvault_name}':")
         for secret in secrets:
             print(secret)
 
@@ -172,60 +179,38 @@ def update_specific_vault(args):
     """Update the cache for a specific Key Vault."""
     keyvault_name = args.keyvault_name
     print(f"Updating cache for Key Vault: {keyvault_name}")
-    
     try:
-        # Fetch secrets for the Key Vault
         vault, secrets = fetch_secrets_for_vault(keyvault_name)
-        if not secrets:  # No secrets in the Key Vault
-            print(f"No secrets found for Key Vault '{keyvault_name}'.")
-            return
-        
-        # Update the cache for this specific Key Vault
         cache = read_cache()
-        if isinstance(cache, list):  # Convert legacy cache format to dictionary format
+        if isinstance(cache, list):
             cache = {kv: [] for kv in cache}
-        
         cache[vault] = secrets
-        try:
-            with open(CACHE_FILE, "w") as f:
-                json.dump(cache, f)
-            print(f"Cache updated successfully for Key Vault '{keyvault_name}'.")
-        except Exception as e:
-            print(f"Error writing to cache file: {e}")
-
+        write_cache_to_file(cache)
     except AzureCLIError as e:
-        if "[Errno -2] Name or service not known" in str(e):
-            raise Exception(f"The Key Vault '{keyvault_name}' does not exist or is not available.")
-        else:
-            raise e
+        print(f"Error updating cache for Key Vault '{keyvault_name}': {e}")
 
 
 def search(args):
     """Search Key Vaults and secrets in the cache based on the provided text."""
     cache = read_cache()
-    if isinstance(cache, list):  # Convert legacy cache format to dictionary structure if needed
+    if isinstance(cache, list):
         combined_data = {kv: [] for kv in cache}
     else:
         combined_data = cache
 
     search_text = args.text
     search_results = []
-
-    # Create the "vault/secret" paths
     for vault, secrets in combined_data.items():
         if not secrets:
             search_results.append(f"{vault}/")
         if isinstance(secrets, list):
             search_results.extend(f"{vault}/{secret}" for secret in secrets)
 
-    # Perform search based on the presence of wildcard (*)
     if '*' in search_text:
-        # Convert search_text (with wildcard *) into regex
         regex_pattern = "^" + search_text.replace("*", ".*") + "$"
         search_pattern = re.compile(regex_pattern)
         matches = [item for item in search_results if search_pattern.match(item)]
     else:
-        # Prefix search (simple string startswith)
         matches = [item for item in search_results if item.startswith(search_text)]
 
     if not matches:
@@ -250,7 +235,7 @@ def list_commands(args=None):
 def ls_cache(args=None):
     """Print the cached Key Vault names, one per line."""
     cache = read_cache()
-    if isinstance(cache, dict):  # Handle nested cache structure
+    if isinstance(cache, dict):
         vault_names = list(cache.keys())
     else:
         vault_names = cache
@@ -262,13 +247,11 @@ def main():
     parser = ArgumentParser(description="Azure Key Vault CLI tool with caching.")
     subparsers = parser.add_subparsers(dest="command")
 
-    # Subcommands
     subparsers.add_parser("update", help="Update cache with Key Vault names.").set_defaults(func=update_cache)
     subparsers.add_parser("update_all", help="Update cache with Key Vault names and their secret names.").set_defaults(func=update_all)
     subparsers.add_parser("sync", help="Alias for `update`.").set_defaults(func=update_cache)
     subparsers.add_parser("ls", help="List all cached Key Vault names.").set_defaults(func=ls_cache)
 
-    # Key Vault Commands
     kv_parser = subparsers.add_parser("kv", help="Manage secrets from a specific Key Vault.")
     kv_parser.add_argument("keyvault_name", help="Name of the Key Vault")
     kv_parser.set_defaults(func=list_secrets)
@@ -280,16 +263,12 @@ def main():
     kv_show_parser.set_defaults(func=show_secrets)
     kv_update_parser = kv_subparsers.add_parser("update", help="Update cache for a specific Key Vault.")
     kv_update_parser.set_defaults(func=update_specific_vault)
-    
-    # `search` command
+
     search_parser = subparsers.add_parser("search", help="Search vault/secret paths in the cache.")
     search_parser.add_argument("text", help="Search text (supports wildcard * syntax for matches).")
     search_parser.set_defaults(func=search)
-    
-    # `--complete` option
-    parser.add_argument("--complete", action="store_true", help="Output cached Key Vault names for autocompletion.")
 
-    # `--list_commands` option
+    parser.add_argument("--complete", action="store_true", help="Output cached Key Vault names for autocompletion.")
     parser.add_argument("--list_commands", action="store_true", help="Output the list of all available main commands.")
 
     args = parser.parse_args()
