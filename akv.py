@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from argparse import ArgumentParser
 from tqdm import tqdm  # Progress bar library
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Define the location for the cache file
 CACHE_FILE = Path.home() / ".akv_cache.json"
@@ -22,8 +23,23 @@ def fetch_keyvault_names():
         print(f"Error fetching keyvault names: {e}")
         return []
 
+def fetch_secrets_for_vault(vault):
+    """Fetch secrets for a specific Key Vault."""
+    try:
+        result = subprocess.run(
+            ["az", "keyvault", "secret", "list", "--vault-name", vault, "--query", "[].name", "-o", "tsv"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        secret_names = result.stdout.strip().split("\n")
+        return vault, secret_names
+    except subprocess.CalledProcessError as e:
+        print(f"Error fetching secrets for Key Vault '{vault}': {e}")
+        return vault, []
+
 def fetch_keyvault_and_secret_names():
-    """Fetch both key vault names and their secret names, with a progress bar."""
+    """Fetch both key vault names and their secret names, using parallel execution."""
     vaults = {}
     keyvault_names = fetch_keyvault_names()
 
@@ -31,22 +47,20 @@ def fetch_keyvault_and_secret_names():
         print("No Key Vaults found.")
         return vaults
 
-    print("Fetching secrets for Key Vaults...")
-    with tqdm(total=len(keyvault_names), unit="vaults") as pbar:
-        for vault in keyvault_names:
-            try:
-                result = subprocess.run(
-                    ["az", "keyvault", "secret", "list", "--vault-name", vault, "--query", "[].name", "-o", "tsv"],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
-                secret_names = result.stdout.strip().split("\n")
-                vaults[vault] = secret_names
-            except subprocess.CalledProcessError as e:
-                print(f"Error fetching secrets for Key Vault '{vault}': {e}")
-                vaults[vault] = []  # Store an empty list if fetching secrets fails
-            pbar.update(1)  # Increment the progress bar
+    print("Fetching secrets for Key Vaults (up to 10 at a time)...")
+
+    # Use ThreadPoolExecutor to parallelize the secret-fetching tasks
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        # Submit tasks for fetching secrets for each Key Vault
+        future_to_vault = {executor.submit(fetch_secrets_for_vault, vault): vault for vault in keyvault_names}
+
+        # Create a progress bar for the tasks
+        with tqdm(total=len(future_to_vault), unit="vaults") as pbar:
+            for future in as_completed(future_to_vault):
+                vault, secrets = future.result()
+                vaults[vault] = secrets
+                pbar.update(1)  # Increment the progress bar
+
     print("Secrets fetching complete.")
     return vaults
 
