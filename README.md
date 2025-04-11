@@ -1,125 +1,179 @@
-# Azure Key Vault CLI Tool (`akv`)
+# 🚀 Azure Key Vault CLI Tool (`akv`)
 
-This is a convenient CLI tool that simplifies working with Azure Key Vaults. It leverages Azure CLI (`az`) under the hood and provides caching of Key Vaults and secrets with smart autocompletion support.
+A streamlined command-line interface to effortlessly manage Azure Key Vaults, powered by [Azure CLI (`az`)](https://docs.microsoft.com/cli/azure/install-azure-cli). Boost your productivity with smart local caching, powerful wildcard searches, and supersmooth autocompletion. ⚡️🔍
 
-## Features:
+---
 
-- List Azure Key Vaults and their secrets.
-- Cache Key Vaults and secrets **names** locally for faster and offline browsing.
-- Search vaults and secrets effectively using wildcards.
-- Integrated bash-completion for easier terminal usage.
-- **Does NOT cache the secret values** for security reasons.
+## ✨ Features
 
-## Requirements:
-- [Python 3.7+](https://www.python.org/downloads/)
-- [Azure CLI installed](https://docs.microsoft.com/cli/azure/install-azure-cli)
-- `az login` executed to authenticate your session.
+- ✅ Quickly list Azure Key Vaults and their secrets.
+- 🗃️ Local caching of Key Vault and secrets **names** for super-fast and offline access.
+- 🔎 Advanced wildcard searching capability for vaults and secrets.
+- 📟 Integrated bash autocompletion for smooth navigation of vaults, secrets, and subcommands.
+- 🔐 **Safe & Secure**: Secret values are NEVER cached locally!
 
-## Installation
+---
 
-### Step 1: Clone the Repository
+## 📋 Requirements
 
-```sh
+- 🐍 [Python 3.7+](https://www.python.org/downloads/)
+- ☁️ [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli)
+- 🔑 An authenticated Azure CLI session
+
+---
+
+## ⚙️ Installation
+
+### 1️⃣ Clone the Repository
+
+```bash
 git clone <your-repository-url>
 cd <repository-name>
 ```
 
-### Step 2: Create Virtual Environment & Install Dependencies:
+### 2️⃣ Set up Python Environment
 
-```sh
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 3: Authenticate With Azure
+### 3️⃣ Install `akv` and Enable Bash Autocomplete 📟
 
-Ensure you're logged in to your Azure account:
+Create a global symlink for the CLI script and enable bash autocomplete support:
 
-```sh
-az login
-```
-
-### Step 4: Install the Script and Enable Bash Completion:
-
-This will create a symlink (`akv`) to `/usr/local/bin` and enable bash autocompletion:
-
-```sh
-sudo ln -s $(realpath akv.py) /usr/local/bin/akv
+```bash
+# Link 'akv' script globally
+sudo ln -s "$(realpath akv.py)" /usr/local/bin/akv
 sudo chmod +x /usr/local/bin/akv
 
-# Install bash-completion
+# Enable bash-completion
 sudo cp akv-completion /etc/bash_completion.d/akv-completion
 
-# Reload bash-completion in your current shell
+# Reload completion in current shell
 source /etc/bash_completion.d/akv-completion
 ```
 
-**Tip:** If you cannot add scripts into `/usr/local/bin/`, you can place the symlink in another directory already in your `PATH`.
+> 📝 **Note:** If permissions restrict changes in `/usr/local/bin`, you may symlink to another directory in your `$PATH`.
 
-## Usage
+### 4️⃣ Authenticate to Azure
 
-```sh
-# Update cache with Key Vault names
-akv update
+Make sure you're logged in using Azure CLI:
 
-# Update cache with Key Vault names AND secrets (slower but recommended periodically)
-akv update_all
-
-# List cached Key Vault names
-akv ls
-
-# List secrets from a Key Vault (cached)
-akv kv <keyvault-name> ls
-
-# Show ALL secrets and their values from a Key Vault
-akv kv <keyvault-name> show
-
-# Show specific secret's value
-akv kv <keyvault-name> show <secret-name>
-
-# Search using wildcard
-akv search "myvault*secret*"
-
-# Show secrets and values for wildcard search
-akv search "myvault*secret*" show
+```bash
+az login
 ```
-
-### Examples:
-
-```sh
-# List key vaults
-akv ls
-
-# List secrets in my-keyvault
-akv kv my-keyvault ls
-
-# Get specific secret
-akv kv my-keyvault show api-key
-
-# Update secrets for a specific vault only
-akv kv my-keyvault update
-
-# Search secrets with wildcard
-akv search "my-vault-*" show
-```
-
-## Useful tips
-
-### Update Cache Periodically:
-
-For optimized experience, regularly update the cache:
-
-```sh
-akv update_all
-```
-
-### Troubleshooting
-
-- **Azure authentication errors:** Ensure you've run `az login` and that you have proper permissions for your Key Vaults.
-- **Permission Issues:**  
-  If you encounter permission issues when creating symlinks or installing completion scripts, ensure you're running commands with sufficient privileges (`sudo`) or use a directory you have write permission to that's listed in your `$PATH`.
 
 ---
 
-This README should clearly guide you through project setup, installation, usage, and provide handy examples and troubleshooting guidelines.
+## 🚩 Quick Start (Basic Usage)
+
+Basic workflow examples:
+
+```bash
+# Refresh local cache (vaults only)
+akv update
+
+# Fully refresh local cache (vaults & secrets; slower)
+akv update_all
+
+# List all cached vaults
+akv ls
+
+# List cached secrets from a specific Key Vault
+akv kv <keyvault-name> ls
+
+# Display ALL secrets with their values in a Vault (requires Azure access)
+akv kv <keyvault-name> show
+
+# Display the value of a specific secret
+akv kv <keyvault-name> show <secret-name>
+
+# Powerful wildcard search
+akv search "prod-*secret*"
+
+# Show secrets and values from wildcard search matches
+akv search "prod-*secret*" show
+```
+
+### 📖 Practical Examples
+
+```bash
+# List key vaults in cache
+akv ls
+
+# List secrets inside 'my-keyvault'
+akv kv my-keyvault ls
+
+# Get specific secret's value from 'my-keyvault'
+akv kv my-keyvault show api-key
+
+# Refresh secrets for 'my-keyvault' only
+akv kv my-keyvault update
+
+# Search secrets with wildcard and show values
+akv search "my-vault-*" show
+```
+
+---
+
+## 📟 Smart Autocompletion Usage
+
+Enjoy effortless command completion powered by smart caching of your Key Vaults and secrets:
+
+- Typing `akv [TAB]` reveals all available subcommands.
+- Typing `akv kv [TAB]` lists all cached Key Vault names.
+- Typing `akv kv <keyvault-name> show [TAB]` displays all cached secret names within the selected Key Vault.
+
+*Autocomplete makes navigation even easier—give it a try!* 🚀
+
+---
+## 🛠️ Roadmap
+
+Exciting features planned for future releases:
+
+- ➕ **Add Secrets**  
+    - `akv kv <vault> add <secret> <value>`  
+    - `akv add <vault/secret> <value>`  
+
+- 🔀 **Move Secrets**  
+    - `akv mv <vault/secret> <vault/secret>`  
+    - `akv kv <vault> mv <secret> <vault/secret>`  
+
+- 📋 **Copy Secrets**  
+    - `akv cp <vault/secret> <vault/secret>`  
+    - `akv kv <vault> cp <secret> <vault/secret>`  
+
+- ❌ **Delete Secrets**  
+    - `akv rm <vault/secret>`  
+    - `akv kv <vault> rm <secret>`  
+
+Stay tuned for these updates to make `akv` even more powerful and versatile! 🚀
+
+## 📌 Best Practices & Tips
+
+- ▶️ **Keep Cache Updated:** Periodically refresh your cache for the latest vaults and secrets:
+  ```sh
+  akv update_all
+  ```
+
+- 🔒 **Stay Secure:** Remember, secret values are NEVER cached locally.
+
+---
+
+## 📡 Troubleshooting FAQ
+
+- ❌ **Authentication problems?**  
+  Ensure you've authenticated using:
+  ```sh
+  az login
+  ```
+  Also confirm your Azure account has permission to list and access your key vaults.
+
+- 🚧 **Symlink or file permissions issue?**  
+  Use `sudo` if needed. Alternatively, create the symlink in a directory included in your `$PATH` and accessible without elevated privileges.
+
+---
+
+> 💡 This README is designed to help you quickly set up, utilize, and troubleshoot the `akv` CLI tool efficiently. Boost your productivity today with `akv`! ⚡️🔑
