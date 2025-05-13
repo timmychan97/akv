@@ -284,6 +284,34 @@ def ls_cache(args=None):
     for vault in vault_names:
         print(vault)
 
+def add_secret_kv(args):
+    """Add a secret to a Key Vault using 'kv <vault> add <secret> <value>' syntax."""
+    vault = args.keyvault_name
+    secret = args.secret
+    value = args.value
+    command = [
+        "az", "keyvault", "secret", "set",
+        "--vault-name", vault,
+        "--name", secret,
+        "--value", value,
+        "-o", "tsv"
+    ]
+    try:
+        output = run_command(command)
+        print(f"Secret '{secret}' added to vault '{vault}'.")
+        # Optionally update cache for this vault
+        update_specific_vault(type("Args", (), {"keyvault_name": vault})())
+    except AzureCLIError as e:
+        print(f"\033[91mError adding secret: {e}\033[0m", file=sys.stderr)
+        sys.exit(1)
+
+def add_secret(args):
+    """Add a secret to a Key Vault."""
+    if "/" not in args.path:
+        print("Error: Path must be in the format <vault>/<secret>", file=sys.stderr)
+        sys.exit(1)
+    vault, secret = args.path.split("/", 1)
+    add_secret_kv(type("Args", (), {"keyvault_name": vault, "secret": secret, "value": args.value})())
 
 def main():
     parser = ArgumentParser(description="Azure Key Vault CLI tool with caching.")
@@ -305,6 +333,10 @@ def main():
     kv_show_parser.set_defaults(func=show_secrets)
     kv_update_parser = kv_subparsers.add_parser("update", help="Update cache for a specific Key Vault.")
     kv_update_parser.set_defaults(func=update_specific_vault)
+    kv_add_parser = kv_subparsers.add_parser("add", help="Add a secret to this Key Vault: <secret> <value>")
+    kv_add_parser.add_argument("secret", help="Name of the secret")
+    kv_add_parser.add_argument("value", help="Value for the secret")
+    kv_add_parser.set_defaults(func=add_secret_kv)
 
     search_parser = subparsers.add_parser("search", help="Search vault/secret paths in the cache.")
     search_parser.add_argument("text", help="Search text (supports wildcard * syntax for matches).")
@@ -312,6 +344,11 @@ def main():
     search_subparsers = search_parser.add_subparsers(dest="subcommand")
     search_show_parser = search_subparsers.add_parser("show", help="List all secrets and their values from the search.")
     search_show_parser.set_defaults(func=search, show=True)
+
+    add_parser = subparsers.add_parser("add", help="Add a secret to a Key Vault: <vault>/<secret> <value>")
+    add_parser.add_argument("path", help="Path in the form <vault>/<secret>")
+    add_parser.add_argument("value", help="Value for the secret")
+    add_parser.set_defaults(func=add_secret)
 
     parser.add_argument("--complete", action="store_true", help="Output cached Key Vault names for autocompletion.")
     parser.add_argument("--list_commands", action="store_true", help="Output the list of all available main commands.")
