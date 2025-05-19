@@ -90,6 +90,19 @@ akv kv <keyvault-name> show
 # Display the value of a specific secret
 akv kv <keyvault-name> show <secret-name>
 
+# Add a secret to a vault
+akv add <vault/secret> <value>
+akv kv <keyvault-name> add <secret-name> <value>
+
+# Edit (update) the value of a secret
+akv edit <vault/secret> <new-value>
+akv kv <keyvault-name> edit <secret-name> <new-value>
+
+# Refresh secrets for 'my-keyvault' only (update cache for a specific vault)
+akv kv <keyvault-name> update
+akv kv <keyvault-name> sync      # alias for update
+akv kv <keyvault-name> pull      # alias for update
+
 # Powerful wildcard search
 akv search "prod-*secret*"
 
@@ -109,8 +122,18 @@ akv kv my-keyvault ls
 # Get specific secret's value from 'my-keyvault'
 akv kv my-keyvault show api-key
 
+# Add a secret to 'my-keyvault'
+akv kv my-keyvault add my-secret my-value
+akv add my-keyvault/my-secret my-value
+
+# Edit a secret in 'my-keyvault'
+akv kv my-keyvault edit my-secret new-value
+akv edit my-keyvault/my-secret new-value
+
 # Refresh secrets for 'my-keyvault' only
 akv kv my-keyvault update
+akv kv my-keyvault sync
+akv kv my-keyvault pull
 
 # Search secrets with wildcard and show values
 akv search "my-vault-*" show
