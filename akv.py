@@ -4,7 +4,7 @@ import subprocess
 import json
 import re
 from pathlib import Path
-from argparse import ArgumentParser
+from argparse import ArgumentParser, _SubParsersAction
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -268,10 +268,14 @@ def handle_completion(args=None):
     print("\n".join(vault_names))
 
 
-def list_commands(args=None):
+def list_commands(parser):
     """Output the list of registered commands for Bash completion."""
-    commands = ["update", "sync", "ls", "kv", "update_all", "search", "--complete", "--list_commands"]
-    print("\n".join(commands))
+    subparsers_action = next(
+        action for action in parser._actions if isinstance(action, _SubParsersAction)
+    )
+    commands = subparsers_action.choices.keys()
+    for command in sorted(commands):
+        print(command)
 
 
 def ls_cache(args=None):
@@ -406,7 +410,7 @@ def main():
     elif args.complete:
         handle_completion(args)
     elif args.list_commands:
-        list_commands(args)
+        list_commands(parser)
     else:
         parser.print_help()
 
