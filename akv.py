@@ -313,6 +313,36 @@ def add_secret(args):
     vault, secret = args.path.split("/", 1)
     add_secret_kv(type("Args", (), {"keyvault_name": vault, "secret": secret, "value": args.value})())
 
+def edit_secret_kv(args):
+    """Edit (update) the value of a secret in a Key Vault using 'kv <vault> edit <secret> <value>' syntax."""
+    vault = args.keyvault_name
+    secret = args.secret
+    value = args.value
+    command = [
+        "az", "keyvault", "secret", "set",
+        "--vault-name", vault,
+        "--name", secret,
+        "--value", value,
+        "-o", "tsv"
+    ]
+    try:
+        output = run_command(command)
+        print(f"Secret '{secret}' updated in vault '{vault}'.")
+        update_specific_vault(type("Args", (), {"keyvault_name": vault})())
+    except AzureCLIError as e:
+        print(f"\033[91mError updating secret: {e}\033[0m", file=sys.stderr)
+        sys.exit(1)
+
+def edit_secret(args):
+    """Edit (update) the value of a secret using 'edit <vault>/<secret> <value>' syntax."""
+    if "/" not in args.path:
+        print("Error: Path must be in the format <vault>/<secret>", file=sys.stderr)
+        sys.exit(1)
+    vault, secret = args.path.split("/", 1)
+    edit_secret_kv(type("Args", (), {"keyvault_name": vault, "secret": secret, "value": args.value})())
+
+
+
 def main():
     parser = ArgumentParser(description="Azure Key Vault CLI tool with caching.")
     subparsers = parser.add_subparsers(dest="command")
@@ -337,6 +367,10 @@ def main():
     kv_add_parser.add_argument("secret", help="Name of the secret")
     kv_add_parser.add_argument("value", help="Value for the secret")
     kv_add_parser.set_defaults(func=add_secret_kv)
+    kv_edit_parser = kv_subparsers.add_parser("edit", help="Edit (update) the value of a secret in this Key Vault: <secret> <value>")
+    kv_edit_parser.add_argument("secret", help="Name of the secret")
+    kv_edit_parser.add_argument("value", help="New value for the secret")
+    kv_edit_parser.set_defaults(func=edit_secret_kv)
 
     search_parser = subparsers.add_parser("search", help="Search vault/secret paths in the cache.")
     search_parser.add_argument("text", help="Search text (supports wildcard * syntax for matches).")
@@ -349,6 +383,11 @@ def main():
     add_parser.add_argument("path", help="Path in the form <vault>/<secret>")
     add_parser.add_argument("value", help="Value for the secret")
     add_parser.set_defaults(func=add_secret)
+
+    edit_parser = subparsers.add_parser("edit", help="Edit (update) the value of a secret: <vault>/<secret> <value>")
+    edit_parser.add_argument("path", help="Path in the form <vault>/<secret>")
+    edit_parser.add_argument("value", help="New value for the secret")
+    edit_parser.set_defaults(func=edit_secret)
 
     parser.add_argument("--complete", action="store_true", help="Output cached Key Vault names for autocompletion.")
     parser.add_argument("--list_commands", action="store_true", help="Output the list of all available main commands.")
