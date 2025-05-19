@@ -350,6 +350,7 @@ def main():
     subparsers.add_parser("update", help="Update cache with Key Vault names.").set_defaults(func=update_cache)
     subparsers.add_parser("update_all", help="Update cache with Key Vault names and their secret names.").set_defaults(func=update_all)
     subparsers.add_parser("sync", help="Alias for `update`.").set_defaults(func=update_cache)
+    subparsers.add_parser("pull", help="Alias for `update`.").set_defaults(func=update_cache)
     subparsers.add_parser("ls", help="List all cached Key Vault names.").set_defaults(func=ls_cache)
 
     kv_parser = subparsers.add_parser("kv", help="Manage secrets from a specific Key Vault.")
@@ -363,6 +364,9 @@ def main():
     kv_show_parser.set_defaults(func=show_secrets)
     kv_update_parser = kv_subparsers.add_parser("update", help="Update cache for a specific Key Vault.")
     kv_update_parser.set_defaults(func=update_specific_vault)
+    kv_subparsers.add_parser("sync", help="Alias for `update` for this Key Vault.").set_defaults(func=update_specific_vault)
+    kv_subparsers.add_parser("pull", help="Alias for `update` for this Key Vault.").set_defaults(func=update_specific_vault)
+
     kv_add_parser = kv_subparsers.add_parser("add", help="Add a secret to this Key Vault: <secret> <value>")
     kv_add_parser.add_argument("secret", help="Name of the secret")
     kv_add_parser.add_argument("value", help="Value for the secret")
