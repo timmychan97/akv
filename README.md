@@ -156,10 +156,6 @@ Enjoy effortless command completion powered by smart caching of your Key Vaults 
 
 Exciting features planned for future releases:
 
-- ➕ **Add Secrets**  
-    - `akv kv <vault> add <secret> <value>`  
-    - `akv add <vault/secret> <value>`  
-
 - 🔀 **Move Secrets**  
     - `akv mv <vault/secret> <vault/secret>`  
     - `akv kv <vault> mv <secret> <vault/secret>`  
